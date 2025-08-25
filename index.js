@@ -157,6 +157,14 @@ app.post('/api/analisar-contrato', upload.single('file'), async (req, res) => {
     // Salva o token para o fluxo de pagamento
     paymentTokens[token] = { liberado: false };
     
+    // Log de debug para verificar o que está sendo retornado
+    console.log('Token gerado:', token);
+    console.log('Resposta sendo enviada:', { 
+      clausulas: resposta, 
+      token: token,
+      success: true 
+    });
+    
     // Retorna a resposta no formato esperado pelo frontend
     res.json({ 
       clausulas: resposta, 
