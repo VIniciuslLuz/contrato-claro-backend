@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
 import Tesseract from 'tesseract.js';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
@@ -9,9 +9,6 @@ import fs from 'fs';
 import path from 'path';
 import Stripe from 'stripe';
 import admin from 'firebase-admin';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const serviceAccount = require('./contratoclar0-firebase-adminsdk-fbsvc-85dae70562.json');
 
 // Configurações
 dotenv.config();
@@ -44,17 +41,27 @@ const paymentTokens = {};
 // Inicializa o Firebase Admin SDK
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    // databaseURL: 'https://SEU_PROJECT_ID.firebaseio.com' // adicione se necessário
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_ADMIN_SDK || '{}'))
   });
 }
 const firestore = admin.firestore();
 
 // Função para extrair texto de PDF
 async function extractTextFromPDF(filePath) {
-  const dataBuffer = fs.readFileSync(filePath);
-  const data = await pdfParse(dataBuffer);
-  return data.text;
+  try {
+    const dataBuffer = fs.readFileSync(filePath);
+    const data = await pdfjsLib.getDocument(dataBuffer).promise;
+    let text = '';
+    for (let i = 1; i <= data.numPages; i++) {
+      const page = await data.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ');
+    }
+    return text;
+  } catch (error) {
+    console.error('Erro ao processar PDF:', error);
+    throw new Error(`Erro ao processar PDF: ${error.message}`);
+  }
 }
 
 // Função para extrair texto de imagem
