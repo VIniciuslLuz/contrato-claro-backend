@@ -77,18 +77,23 @@ app.post('/api/analisar-contrato', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     const uid = req.body.uid; // Recebe o uid do usuário
+    
     if (!file) {
       console.log('Nenhum arquivo recebido');
       return res.status(400).json({ error: 'Arquivo não enviado.' });
     }
+    
+    // Temporariamente tornando uid opcional para teste
     if (!uid) {
-      return res.status(400).json({ error: 'Usuário não autenticado (uid não enviado).' });
+      console.log('UID não enviado, usando UID temporário para teste');
+      // uid = 'test-user-' + Date.now(); // Comentado por enquanto
     }
 
     console.log('Arquivo recebido:', {
       filename: file.originalname,
       mimetype: file.mimetype,
-      size: file.size
+      size: file.size,
+      uid: uid || 'não informado'
     });
 
     let textoExtraido = '';
@@ -145,7 +150,7 @@ app.post('/api/analisar-contrato', upload.single('file'), async (req, res) => {
     // Salva a análise no Firestore associada ao token
     await firestore.collection('análises de contratos').doc(token).set({
       token,
-      uid, // Salva o uid do usuário
+      uid: uid || 'test-user-' + Date.now(), // UID temporário se não informado
       data: new Date().toISOString(),
       clausulas: resposta,
       resumoSeguras: [],
