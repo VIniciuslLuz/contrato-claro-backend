@@ -138,41 +138,31 @@ app.post('/api/analisar-contrato', upload.single('file'), async (req, res) => {
     const resposta = completion.choices[0].message.content;
     // Gera token único para o contrato
     const token = Math.random().toString(36).substr(2, 12) + Date.now();
-    // Após obter a resposta da IA (resposta), gerar resumos e recomendações
-    let resumoSeguras = [];
-    let resumoRiscos = [];
-    let recomendacoes = '';
-    try {
-      // Chama o endpoint interno para resumir e classificar cláusulas
-      const resumoResp = await fetch('http://localhost:3001/api/resumir-clausulas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clausulas: resposta })
-      });
-      if (resumoResp.ok) {
-        const resumoData = await resumoResp.json();
-        resumoSeguras = resumoData.seguras || [];
-        resumoRiscos = resumoData.riscos || [];
-      }
-      // Gera recomendações simples (pode ser melhorado)
-      recomendacoes = 'Considere consultar um advogado para revisar o contrato.';
-    } catch (e) {
-      console.error('Erro ao gerar resumo/classificação:', e);
-    }
+    
+    // Gera recomendações simples
+    const recomendacoes = 'Considere consultar um advogado para revisar o contrato.';
+    
     // Salva a análise no Firestore associada ao token
     await firestore.collection('análises de contratos').doc(token).set({
       token,
       uid, // Salva o uid do usuário
       data: new Date().toISOString(),
       clausulas: resposta,
-      resumoSeguras,
-      resumoRiscos,
+      resumoSeguras: [],
+      resumoRiscos: [],
       recomendacoes,
       pago: false,
     });
+    
     // Salva o token para o fluxo de pagamento
     paymentTokens[token] = { liberado: false };
-    res.json({ clausulas: resposta, token });
+    
+    // Retorna a resposta no formato esperado pelo frontend
+    res.json({ 
+      clausulas: resposta, 
+      token: token,
+      success: true 
+    });
   } catch (err) {
     console.error('Erro ao processar o contrato:', err);
     res.status(500).json({ error: 'Erro ao processar o contrato: ' + err.message });
