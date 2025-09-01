@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "test-db": "node test-database.js",
-    "setup": "node setup-firebase.js"
+    "setup": "node setup-firebase.js",
+    "verificar": "node verificar-config.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
