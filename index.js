@@ -39,12 +39,60 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-08-
 const paymentTokens = {};
 
 // Inicializa o Firebase Admin SDK
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_ADMIN_SDK || '{}'))
-  });
+let firestore;
+try {
+  if (!admin.apps.length) {
+    // Tenta carregar as credenciais do arquivo de configuração
+    let firebaseConfig;
+    try {
+      // Primeiro tenta carregar do arquivo de configuração
+      const configPath = path.join(process.cwd(), 'firebase-config.json');
+      if (fs.existsSync(configPath)) {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        console.log('✅ Firebase configurado via arquivo firebase-config.json');
+      } else if (process.env.FIREBASE_ADMIN_SDK) {
+        // Se não existir arquivo, tenta via variável de ambiente
+        firebaseConfig = JSON.parse(process.env.FIREBASE_ADMIN_SDK);
+        console.log('✅ Firebase configurado via variável de ambiente');
+      } else {
+        throw new Error('Nenhuma configuração do Firebase encontrada');
+      }
+      
+      admin.initializeApp({
+        credential: admin.credential.cert(firebaseConfig)
+      });
+      
+      firestore = admin.firestore();
+      console.log('✅ Firebase Admin SDK inicializado com sucesso');
+      
+      // Testa a conexão
+      await firestore.collection('test').doc('test').get();
+      console.log('✅ Conexão com Firestore testada com sucesso');
+      
+    } catch (configError) {
+      console.error('❌ Erro na configuração do Firebase:', configError.message);
+      console.log('📝 Crie um arquivo firebase-config.json na raiz do backend com suas credenciais');
+      console.log('📝 Ou configure a variável de ambiente FIREBASE_ADMIN_SDK');
+      
+      // Cria uma instância mock para não quebrar o servidor
+      firestore = {
+        collection: () => ({
+          doc: () => ({
+            set: async () => { console.log('⚠️ Firebase não configurado - dados não salvos'); },
+            update: async () => { console.log('⚠️ Firebase não configurado - dados não atualizados'); },
+            get: async () => ({ exists: false, data: () => null })
+          })
+        })
+      };
+    }
+  } else {
+    firestore = admin.firestore();
+    console.log('✅ Firebase Admin SDK já inicializado');
+  }
+} catch (error) {
+  console.error('❌ Erro crítico na inicialização do Firebase:', error);
+  process.exit(1);
 }
-const firestore = admin.firestore();
 
 // Função para extrair texto de PDF
 async function extractTextFromPDF(filePath) {
@@ -148,19 +196,34 @@ app.post('/api/analisar-contrato', upload.single('file'), async (req, res) => {
     const recomendacoes = 'Considere consultar um advogado para revisar o contrato.';
     
     // Salva a análise no Firestore associada ao token
-    await firestore.collection('análises de contratos').doc(token).set({
-      token,
-      uid: uid || 'test-user-' + Date.now(), // UID temporário se não informado
-      data: new Date().toISOString(),
-      clausulas: resposta,
-      resumoSeguras: [],
-      resumoRiscos: [],
-      recomendacoes,
-      pago: false,
-    });
-    
-    // Salva o token para o fluxo de pagamento
-    paymentTokens[token] = { liberado: false };
+    try {
+      console.log('💾 Salvando análise no banco de dados...');
+      const analiseData = {
+        token,
+        uid: uid || 'test-user-' + Date.now(), // UID temporário se não informado
+        data: new Date().toISOString(),
+        clausulas: resposta,
+        resumoSeguras: [],
+        resumoRiscos: [],
+        recomendacoes,
+        pago: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      await firestore.collection('análises de contratos').doc(token).set(analiseData);
+      console.log('✅ Análise salva com sucesso no banco de dados');
+      
+      // Salva o token para o fluxo de pagamento
+      paymentTokens[token] = { liberado: false };
+      console.log('✅ Token de pagamento registrado:', token);
+      
+    } catch (dbError) {
+      console.error('❌ Erro ao salvar no banco de dados:', dbError);
+      console.log('⚠️ Continuando sem salvar no banco - análise ainda será retornada');
+      
+      // Mesmo com erro no banco, retorna a análise para o usuário
+      // O token ainda é válido para pagamento posterior
+    }
     
     // Log de debug para verificar o que está sendo retornado
     console.log('Token gerado:', token);
@@ -245,10 +308,18 @@ app.post('/api/create-checkout-session', async (req, res) => {
     });
 
     // Salva a relação session_id no Firestore
-    await firestore.collection('análises de contratos').doc(token).update({
-      session_id: session.id,
-      pago: false
-    });
+    try {
+      console.log('💾 Atualizando sessão de pagamento no banco...');
+      await firestore.collection('análises de contratos').doc(token).update({
+        session_id: session.id,
+        pago: false,
+        ultima_atualizacao: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log('✅ Sessão de pagamento atualizada no banco');
+    } catch (dbError) {
+      console.error('❌ Erro ao atualizar sessão no banco:', dbError);
+      console.log('⚠️ Checkout criado mas não foi possível salvar no banco');
+    }
 
     res.json({ url: session.url });
   } catch (err) {
@@ -279,9 +350,22 @@ app.get('/api/analise-liberada', async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(analise.session_id);
     if (session.payment_status === 'paid') {
       // Atualiza no Firestore
-      await firestore.collection('análises de contratos').doc(token).update({ pago: true });
-      return res.json({ liberado: true });
+      try {
+        console.log('💾 Marcando análise como paga no banco...');
+        await firestore.collection('análises de contratos').doc(token).update({ 
+          pago: true,
+          data_pagamento: admin.firestore.FieldValue.serverTimestamp(),
+          status_pagamento: 'confirmado'
+        });
+        console.log('✅ Análise marcada como paga no banco');
+        return res.json({ liberado: true });
+      } catch (dbError) {
+        console.error('❌ Erro ao atualizar status de pagamento no banco:', dbError);
+        // Mesmo com erro no banco, retorna que está liberado se o Stripe confirmou
+        return res.json({ liberado: true, warning: 'Pagamento confirmado mas erro ao salvar no banco' });
+      }
     } else {
+      console.log('⚠️ Pagamento não confirmado para token:', token);
       return res.json({ liberado: false });
     }
   } catch (err) {

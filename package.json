@@ -4,7 +4,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test-db": "node test-database.js",
+    "setup": "node setup-firebase.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

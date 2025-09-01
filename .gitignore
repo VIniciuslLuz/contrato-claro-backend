@@ -1,24 +1,33 @@
-# Node modules
+# Dependências
 node_modules/
 
-# Environment variables
+# Arquivos de configuração sensíveis
+firebase-config.json
 .env
+.env.local
+.env.production
 
 # Logs
-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build outputs (se tiver build no backend)
-dist/
-build/
+# Arquivos temporários
+uploads/
+temp/
+*.tmp
 
 # Sistema operacional
 .DS_Store
 Thumbs.db
 
-# Editor
+# IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
