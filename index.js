@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
+import { getDocument } from 'pdfjs-dist';
 import Tesseract from 'tesseract.js';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
