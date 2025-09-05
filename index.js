@@ -3,7 +3,7 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
-import { firestore } from './firebase.js'; // se o firebase também for ES Module
+import { firestore } from './firebase.js'; // Lembre de colocar a extensão
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
