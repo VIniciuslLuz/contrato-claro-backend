@@ -1,7 +1,7 @@
 // index.js
 import express from 'express';
 import multer from 'multer';
-import { getDocument } from 'pdfjs-dist/es5/build/pdf.js';
+import { getDocument } from 'pdfjs-dist';
 import Tesseract from 'tesseract.js';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
@@ -52,7 +52,7 @@ try {
 async function extractTextFromPDF(filePath) {
   if (!fs.existsSync(filePath)) throw new Error('Arquivo não encontrado');
   const dataBuffer = fs.readFileSync(filePath);
-  const pdf = await getDocument({ data: dataBuffer }).promise;
+  const pdf = await getDocument(dataBuffer).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
